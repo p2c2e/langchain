@@ -103,6 +103,11 @@ class HuggingFacePipeline(LLM):
                 f"Could not load the {task} model due to missing dependencies."
             ) from e
 
+        if "trust_remote_code" in _model_kwargs:
+            _model_kwargs = {
+                k: v for k, v in _model_kwargs.items() if k != "trust_remote_code"
+            }
+        _pipeline_kwargs = pipeline_kwargs or {}
         if importlib.util.find_spec("torch") is not None:
             import torch
 
@@ -113,26 +118,43 @@ class HuggingFacePipeline(LLM):
                     f"device is required to be within [-1, {cuda_device_count})"
                 )
             if device < 0 and cuda_device_count > 0:
-                logger.warning(
-                    "Device has %d GPUs available. "
-                    "Provide device={deviceId} to `from_model_id` to use available"
-                    "GPUs for execution. deviceId is -1 (default) for CPU and "
-                    "can be a positive integer associated with CUDA device id.",
-                    cuda_device_count,
-                )
-        if "trust_remote_code" in _model_kwargs:
-            _model_kwargs = {
-                k: v for k, v in _model_kwargs.items() if k != "trust_remote_code"
-            }
-        _pipeline_kwargs = pipeline_kwargs or {}
-        pipeline = hf_pipeline(
-            task=task,
-            model=model,
-            tokenizer=tokenizer,
-            device=device,
-            model_kwargs=_model_kwargs,
-            **_pipeline_kwargs,
-        )
+                # Warn if GPUs are available and are not utilized
+                if "device_map" not in _pipeline_kwargs.keys():
+                    logger.warning(
+                        "Device has %d GPUs available. "
+                        "Provide device={deviceId} to `from_model_id` to use available"
+                        "GPUs for execution. deviceId is -1 (default) for CPU and "
+                        "can be a positive integer associated with CUDA device id.",
+                        cuda_device_count,
+                    )
+                    pipeline = hf_pipeline(
+                        task=task,
+                        model=model,
+                        tokenizer=tokenizer,
+                        device=device,
+                        model_kwargs=_model_kwargs,
+                        **_pipeline_kwargs,
+                    )
+                else:
+                    # Use device_map if provided - to allow for "auto"
+                    # device overrides device_map - so, ignore it
+                    pipeline = hf_pipeline(
+                        task=task,
+                        model=model,
+                        device_map=_pipeline_kwargs.pop("device_map"),
+                        tokenizer=tokenizer,
+                        model_kwargs=_model_kwargs,
+                        **_pipeline_kwargs,
+                    )
+        else:
+            pipeline = hf_pipeline(
+                task=task,
+                model=model,
+                tokenizer=tokenizer,
+                device=device,
+                model_kwargs=_model_kwargs,
+                **_pipeline_kwargs,
+            )
         if pipeline.task not in VALID_TASKS:
             raise ValueError(
                 f"Got invalid task {pipeline.task}, "
