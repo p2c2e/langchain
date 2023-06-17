@@ -119,6 +119,7 @@ class HuggingFacePipeline(LLM):
                 )
             if device < 0 and cuda_device_count > 0:
                 # Warn if GPUs are available and are not utilized
+                logger.info("GPUs found - but not utilized")
                 if "device_map" not in _pipeline_kwargs.keys():
                     logger.warning(
                         "Device has %d GPUs available. "
@@ -136,6 +137,7 @@ class HuggingFacePipeline(LLM):
                         **_pipeline_kwargs,
                     )
                 else:
+                    logger.info("Pipeline args contain device_map - using that")
                     # Use device_map if provided - to allow for "auto"
                     # device overrides device_map - so, ignore it
                     pipeline = hf_pipeline(
@@ -147,6 +149,7 @@ class HuggingFacePipeline(LLM):
                         **_pipeline_kwargs,
                     )
         else:
+            logger.info("Non-Torch pipeline setup")
             pipeline = hf_pipeline(
                 task=task,
                 model=model,
